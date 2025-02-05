@@ -1,1 +1,3 @@
-# Determining-Factors-in-the-Percentage-of-Vacant-Housing-in-Good-Condition
+According to data from the National Statistics Institute (INE), in 2021, there were 723,215 vacant housing units in Portugal. These housing units, which do not include second homes, represent a potential resource to mitigate the severe housing crisis the country is currently facing. In order to identify public policy measures that could contribute to solving this problem, it is essential to understand the factors that determine the vacancy of these properties.
+
+With the aim of deepening the understanding of the impact that various factors have on the percentage of vacant housing in good living conditions, the development of a linear and logistic regression model is proposed.
