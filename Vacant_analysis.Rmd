@@ -1,0 +1,907 @@
+---
+title: "Fatores determinantes na percentagem de alojamentos vagos em boas condições habitacionais"
+subtitle: "Análise de Modelos de Regressão Linear e Logística"
+author: "Aitor Varea Oro e Gonçalo Araújo"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+  word_document:
+    toc: true
+    toc_depth: 2
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include= FALSE}
+knitr::opts_chunk$set(echo = TRUE, width = 70)
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(knitr.include.path = FALSE)
+```
+
+\newpage
+
+# [**Introdução**]{.underline} {#introduction}
+
+De acordo com dados do INE, em 2021, existiam em Portugal 723.215
+alojamentos não habitados. Estes alojamentos, que não incluem segundas
+residências, representam um recurso potencial para mitigar a grave crise
+habitacional que o país atualmente enfrenta. Para identificar as medidas
+de política pública que podem contribuir para a resolução deste
+problema, é fundamental compreender os fatores que determinam a
+desocupação destes imóveis.
+
+Com o objetivo de aprofundar o conhecimento sobre o impacto que diversos
+fatores determinam a percentagem de alojamentos vagos em boas condições
+habitacionais, propõe-se o desenvolvimento de um modelo de regressão
+linear e logistica.
+
+Neste projeto foi utilizado o software R para a exploração dos dados e
+análise estatistica e R Markdown para a escrita deste relatório. O
+ficheiro foi renderizado em PDF utilizando o Knitr.
+
+[Go back to Top](#introduction)
+
+# [**Dataset**]{.underline} {#dataset}
+
+Este dataset foi construido através de dados obtidos no INE, de forma a
+entender qual o impacto de diversas variavéis na percentagem de
+alojamentos vagos em boas condições. De forma mais clara, as nossas
+variáveis de interesse para este trabalho incluem:
+
+1.  **percentagem de alojamentos vagos em boas condições**- variável
+    continua.
+
+2.  **valor de venda** da habitação (€/m²)- variável contínua.
+
+3.  **taxa de variação** populacional- variável contínua.
+
+4.  **percentagem de alojamentos vagos no ano 2011**- variável contínua
+
+5.  **percentagem de alojamentos vagos no ano 2021**- variável contínua
+
+6.  **tipo de territorio**- variável categórica com os seguintes
+    fatores: "alta densidade", "baixa densidade", "região autonoma da
+    madeira (RAM)" e "regiao autonoma dos açores (RAA)".
+
+7.  **pressão urbanística**, ou seja, existência de diferenças no valor
+    da venda para indíviduos estrangeiros e portugueses- variável
+    categórica com os fatores: "sim" e "não".
+
+8.  **variação de alojamentos vagos**- variável contínua que expressa a
+    evolução de alojamentos vagos em bom estado de conservação entre
+    2011 e 2021.
+
+## **Pré-processamento dos dados**
+
+```{r include=FALSE}
+library(readr)
+library(ggplot2)
+library(gridExtra)
+library(reshape2)
+library(forcats)
+library(dplyr)
+library(grid)
+library(car)
+
+datase <- read_csv("C:/Users/gonca/Downloads/241213VAGOS2.csv", 
+  
+  col_types = cols(
+    PERCENTAGEM_VAGOS = col_number(), 
+    PERCENTAGEM_VAGOS2 = col_number(), 
+    `Valor venda` = col_number(), 
+    `Variação poulacional` = col_number(),
+    
+    `tipo de territorio` = col_factor(levels = c("ALTA DENSIDADE", 
+                                                 "BAIXA DENSIDADE", 
+                                                 "RAA", 
+                                                 "RAM")), 
+    
+    `PRESSÃO URBANISTICA` = col_character(), 
+    
+    Riqueza = col_skip(), 
+    `Vagos.Reparação Ligeiras` = col_number(),
+    `Vagos.Reparação médias` = col_skip(), 
+    `Vagos.Reparação profundas` = col_skip(), 
+    `Total alojamentos` = col_number(),
+    `Total Vagos 2011_PER` = col_number(),
+    `Total Vagos 2021_PER` = col_number()
+  )
+)
+datase <- as.data.frame(datase)
+```
+
+```{r include=FALSE}
+colnames(datase)[colnames(datase) == "PRESSÃO URBANISTICA"] <- "pressao_urbanistica"
+colnames(datase)[colnames(datase) == "tipo de territorio"] <- "tipo_territorio"
+colnames(datase)[colnames(datase) == "Variação poulacional"] <- "variacao_populacional"
+colnames(datase)[colnames(datase) == "Valor venda"] <- "valor_venda"
+colnames(datase)[colnames(datase) == "Total alojamentos"]<-"total_alojamentos"
+colnames(datase)[colnames(datase) == "Total Vagos 2011_PER"]<-"vagos_2011_per"
+colnames(datase)[colnames(datase) == "Total Vagos 2021_PER"]<-"vagos_2021_per"
+colnames(datase)[colnames(datase) == "Vagos.Reparação não"]<-"vagos_ok"
+colnames(datase)[colnames(datase) == "Vagos.Reparação Ligeiras"]<-"vagos_ligeiras"
+colnames(datase)[colnames(datase) == "Vagos.Reparação médias"]<-"vagos_medias"
+colnames(datase)[colnames(datase) == "Vagos.Reparação profundas"]<-"vagos_profundas"
+colnames(datase)[colnames(datase) == "NUTSIII"]<-"regiao"
+colnames(datase)[colnames(datase) == "PERCENTAGEM_VAGOS"]<-"vagosbom_totalalojamentos"
+colnames(datase)[colnames(datase) == "PERCENTAGEM_VAGOS2"]<-"vagosbom_totalvagos"
+
+datase$total_vagosbom <- datase$vagos_ok+datase$vagos_ligeiras
+datase$variaçao_vagos <- round(datase$vagos_2021_per-datase$vagos_2011_per,3)
+
+datase$vagosbom_totalvagos <- round(datase$vagosbom_totalvagos,3)
+datase$vagosbom_totalalojamentos <- round(datase$vagosbom_totalalojamentos,3)
+
+
+total_na_count <- sum(is.na(datase))
+print(total_na_count)
+
+
+datase <- datase[!is.na(datase$`valor_venda`), ]
+print(sum(is.na(datase$`valor_venda`)))
+```
+
+Após renomear as variáveis para facilitar a interpretação e remover as
+observações com valores nulos (7 casos), o dataframe atualizado e sua
+estrutura são os seguintes:
+
+\newpage
+
+```{r echo=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(kableExtra))
+
+# Create the summary data
+summary_data <- lapply(names(datase), function(col) {
+  data_type <- class(datase[[col]])[1]
+  example_values <- paste0(head(datase[[col]], 3), collapse = ", ")
+  data.frame(Column_Name = col, Data_Type = data_type, Example_Values = example_values)
+})
+summary_df <- do.call(rbind, summary_data)
+
+# Render the table
+kable(summary_df, 
+      format = "latex", 
+      caption = "Estrutura do Dataset: 301 obs",
+      booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                font_size = 8,
+                position = "center") %>%
+  add_header_above(c(" " = 3))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+col_of_interest <-c("vagosbom_totalalojamentos","vagosbom_totalvagos","valor_venda","variacao_populacional","tipo_territorio","pressao_urbanistica","vagos_2011_per","vagos_2021_per","variaçao_vagos")
+
+missing_cols <- setdiff(col_of_interest, colnames(datase))
+if (length(missing_cols) > 0) stop("Columns not found: ", paste(missing_cols, collapse = ", "))
+
+column_info <- lapply(col_of_interest, function(col) {
+  unique_count <- length(unique(datase[[col]]))
+  data.frame(Column_Name = col, Data_Type = class(datase[[col]])[1], Unique_Count = unique_count)
+})
+column_info_df <- do.call(rbind, column_info)
+
+kable(column_info_df, 
+      format = "latex", 
+      caption = "Sumário das variáveis de interesse",
+      booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                font_size = 8,
+                position = "center")
+```
+
+## **Análises Univariadas**
+
+Foram realizadas análises univariadas de todas as variáveis de interesse
+deste estudo. No entanto, devido às restrições de espaço, apenas algumas
+delas serão apresentadas graficamente neste documento. Todas as análises
+completas estão disponíveis no script R.
+
+### Percentagem de alojamentos vagos em boas condições e distribuição do valor de venda
+
+Relativamente à principal variável de interesse neste trabalho, visto
+que apresenta uma distribuição simétrica, foi calculada a média e desvio
+padrão: **8.380** e **2.631**, respetivamente. Por outro lado, dado que
+o valor de venda apresenta uma distribuição assimétrica, foi calculada a
+mediana: **889**, mínimo: **156** e máximo: **4188**.
+
+```{r echo=FALSE, fig.width=8, fig.height=3, fig.align='center'}
+histogram <- ggplot(datase, aes(x = vagosbom_totalalojamentos)) + 
+  geom_histogram(binwidth = 1, fill = "steelblue3", color = "black") +
+  labs(title = "Alojamentos vagos em bom estado",
+       x = "% Alojamentos vagos em bom estado", y = "Frequência") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),face = "bold")
+
+histogram2 <- ggplot(datase, aes(x = valor_venda)) +
+  geom_histogram(binwidth = 280, fill = "lightgreen", color = "black") +
+  labs(title = "Valor de venda", x = "€/m2", y = "Frequencia") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),face = "bold")
+
+grid.arrange(histogram,histogram2, ncol=2)
+```
+
+### Evolução da percentagem de alojamentos vagos no ano 2011 vs 2021
+
+Foi analisada a evolução da percentagem de alojamentos vagos no ano
+2011, comparativamente ao ano 2021, para o mesmo concelho.
+
+```{r echo=FALSE,fig.align='center', fig.width=8, fig.height=4}
+library(tidyr)
+datase <- datase %>%
+  mutate(index = row_number())
+
+datase_long <- datase %>%
+  pivot_longer(
+    cols = c(vagos_2011_per, vagos_2021_per),
+    names_to = "year",
+    values_to = "value"
+  )
+
+ggplot(datase_long, aes(x = index, y = value, color = year)) +
+  geom_point(size = 2, alpha = 0.4) +  
+  geom_smooth(se = FALSE, linewidth = 1.2) +  
+  labs(
+    title = "Evolução do número de alojamentos vagos",
+    x = "Concelho (número)",
+    y = "Percentagem",
+    color = "Ano"
+  ) +
+  theme_minimal() +
+  scale_color_manual(
+    values = c("vagos_2011_per" = "blue", "vagos_2021_per" = "red"),
+    labels = c("2011", "2021")
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),  
+    axis.title = element_text(size = 10),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 10)
+  )
+
+```
+
+Verifica-se um ligeiro aumento na percentagem de alojamentos vagos entre
+2011 e 2021, com uma tendência geral estável entre os concelhos. Apesar
+da variação entre eles, a maioria apresenta valores entre 10% e 20%, com
+alguns aumentos mais marcados em 2021.
+
+### Frequência relativa do tipo de território
+
+Foi construído um "pie chart" de frequências relativas para uma das
+variáveis categóricas de interesse: tipo de território, tendo sido
+observado que "baixa densidade" e "RAM" apresentam as frequências
+maiores e menores, respetivamente.
+
+```{r echo=FALSE}
+freq_dist <- table(datase$tipo_territorio)
+relative_freq <- prop.table(freq_dist)
+
+freq_table <- data.frame(
+  tipo_territorio = names(freq_dist),
+  Frequency = as.integer(freq_dist),
+  Relative_Frequency = round(as.numeric(relative_freq), 4))
+
+add_percentages_to_labels <- function(data, value_column, label_column) {
+  data[[label_column]] <- paste0(data[[label_column]], " (", round(data[[value_column]] * 100, 1), "%)")
+  return(data)
+}
+
+freq_table <- add_percentages_to_labels(freq_table, "Relative_Frequency", "tipo_territorio")
+
+colors_plot1 <- c("#1f78b4", "#33a02c", "#e31a1c", "#ff7f00", "#6a3d9a")
+```
+
+```{r echo=FALSE,fig.align='center', fig.width=5, fig.height=3}
+plot1 <- ggplot(freq_table, aes(x = "", y = Relative_Frequency, fill = tipo_territorio)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = colors_plot1) +
+  labs(title = "Distribuição do tipo de território") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 8, margin = margin(b = 3), face = "bold"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 7, angle = 0, hjust = 0), 
+    legend.position = "right",
+  )
+print(plot1)
+```
+
+## **Análises Bivariadas**
+
+Relativamente às análises bivariadas (variável dependente e uma variável
+contínua / categórica), foram incluidas neste relatório as seguintes:
+
+### Percentagem de alojamentos vagos em boas condições (x valor de venda) e (x tipo de território)
+
+```{r echo=FALSE,fig.align='center', fig.width=8, fig.height=4}
+plot3 <- ggplot(datase, aes(x = valor_venda, y = vagosbom_totalalojamentos)) +
+  geom_point(color = "purple", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "% Vagos bom estado vs Valor de venda",
+       x = "Valor de Venda",
+       y = "% Alojamentos Vagos bom estado") +
+  theme_classic()+
+  theme(
+    plot.title = element_text(hjust = 0.5,face = "bold"))
+
+boxplot_territory <- ggplot(datase, aes(x = tipo_territorio, y = vagosbom_totalalojamentos, fill = tipo_territorio)) +
+  geom_boxplot() +
+  labs(
+    title = "% Vagos bom estado por tipo território",
+    x = "Tipo de Território",
+    y = "% Alojamentos Vagos bom estado",
+    fill = "Tipo de Território"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 0.5, size = 9),
+    legend.position = "none"
+  )
+grid.arrange(plot3,boxplot_territory, ncol=2)
+
+```
+
+Relativamente ao gráfico da esquerda, observa-se uma relação fraca e
+ligeiramente negativa entre o valor de venda e a percentagem de
+alojamentos vagos em bom estado, sugerindo que valores mais altos de
+venda não estão associados a uma maior proporção de alojamentos vagos em
+bom estado. O gráfico à direita não revela quaisquer diferenças na
+distribuição da percentagem de alojamentos vagos em bom estado por
+diferentes tipos de território.
+
+## **Análises Multivariadas**
+
+### Percentagem de alojamentos vagos por valor de venda e tipo de território
+
+Foi analisado o impacto da percentagem de alojamentos vagos em boas
+condições (redimendionada numa escala de 0 a 10) tendo em conta as
+variáveis tipo de território e valor de venda, simultaneamente.
+
+```{r echo=FALSE,fig.align='center', fig.width=8, fig.height=4}
+
+sales_breaks <- seq(0, 4500, by = 500)
+sales_labels <- paste(head(sales_breaks, -1), tail(sales_breaks, -1), sep = "-")
+
+data_cleaned <- datase %>%
+  mutate(
+    valor_venda_category = cut(valor_venda, 
+                              breaks = sales_breaks, 
+                              labels = sales_labels, 
+                              include.lowest = TRUE),
+    vagosbom_totalvagos_rescaled = vagosbom_totalalojamentos / 10
+  )
+
+mean_data <- data_cleaned %>%
+  group_by(valor_venda_category, tipo_territorio) %>%
+  summarise(
+    mean_vagosbom = mean(vagosbom_totalvagos_rescaled, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+plot <- ggplot(mean_data, 
+               aes(x = valor_venda_category, 
+                   y = mean_vagosbom, 
+                   fill = tipo_territorio)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Percentagem de alojamentos vagos por valor de venda e tipo de território",
+    x = "Valor de venda",
+    y = "% alojamentos vagos bom estado (0-10)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
+
+print(plot)
+```
+
+Observa-se neste gráfico que:
+
+1.  Nas zonas de alta densidade populacional, observa-se algo curioso,
+    uma maior vacância habitacional nos extremos do espectro de preços -
+    tanto nas habitações mais económicas (0-500) quanto nas mais premium
+    (4000-4500), sugerindo um possível desajuste entre oferta e procura
+    nestas faixas de valor.
+
+2.  Nas faixas de valor entre 1500-2000, existe uma relativa
+    homogeneidade na percentagem de vacância entre diferentes tipos de
+    território, sugerindo que esta pode ser uma faixa de preço mais
+    equilibrada em termos de mercado.
+
+3.  Os territórios de baixa densidade demonstram uma concentração
+    significativa de imóveis desocupados na faixa média-alta de preços
+    (2000-3000), o que pode indicar um desalinhamento entre o poder de
+    compra local e os valores praticados nestas regiões.
+
+### Matriz de correlação (Variaveis continuas)
+
+De forma a estudar a existência de relações entre a percentagem de
+alojamentos vagos em boas condições contra as diferentes variáveis
+contínuas, foi construida uma matriz de correlação.
+
+```{r echo=FALSE,fig.align='center', fig.width=8, fig.height=4}
+correlation_data <- datase[, c("vagosbom_totalalojamentos","vagosbom_totalvagos", 
+                               "variacao_populacional", "valor_venda","variaçao_vagos")]
+
+
+correlation_matrix <- round(cor(correlation_data, use = "complete.obs"), 2)
+
+
+correlation_matrix_df <- as.data.frame(as.table(correlation_matrix))
+
+
+correlation_matrix_df$fill_value <- correlation_matrix_df$Freq
+diag_indices <- which(correlation_matrix_df$Var1 == correlation_matrix_df$Var2)
+correlation_matrix_df$fill_value[diag_indices] <- NA
+correlation_matrix_df$label <- as.character(correlation_matrix_df$Freq)
+correlation_matrix_df$label[diag_indices] <- "--"
+
+
+# Matriz de correlação com cores (heatmap)
+
+heatmap_plot <- ggplot(correlation_matrix_df, aes(x = Var1, y = Var2, fill = fill_value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = label), color = "black", size = 4) +
+  scale_fill_gradient2(
+    low = "blue", high = "red", mid = "white", midpoint = 0, 
+    limit = c(-1, 1), space = "Lab", name = "Pearson",
+    na.value = "grey90"  
+  ) +
+  labs(title = "Correlation Matrix Heatmap", x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+print(heatmap_plot)
+```
+
+Analisando a matriz de correlação:
+
+1.  Existe uma correlação moderadamente positiva (**0.3**) entre a
+    variação de vagos e a proporção de vagos bons sobre o total de
+    alojamentos, sugerindo que quando aumenta a variação de vagos,
+    também tende a aumentar ligeiramente a proporção de alojamentos
+    vagos em bom estado.
+
+2.  A correlação negativa (**-0.4**) com o valor de venda indica uma
+    relação inversa importante: quanto maior o valor de venda dos
+    imóveis, menor tende a ser a proporção de vagos bons sobre o total
+    de alojamentos. Isto pode sugerir que em áreas com imóveis mais
+    caros, há uma tendência para haver menos alojamentos vagos em bom
+    estado.
+
+3.  A correlação negativa (**-0.33**) com a variação populacional indica
+    que em áreas onde há crescimento populacional, tende a haver menos
+    alojamentos vagos em bom estado, o que faz sentido dado que maior
+    procura habitacional tende a reduzir a vacância.
+
+# [**Análise modelo regressão linear**]{.underline}
+
+Nesta parte final do trabalho, abordamos duas dimensões diferentes. Por
+um lado, os princípios que parecem orientar a criação de um bom modelo.
+Por outro, as ferramentas utilizadas para aferir a sua qualidade
+estatística e o seu contributo para o problema em estudo.
+
+## **Princípios seguidos na elaboração dos modelos**
+
+A elaboração dos diferentes modelos considerou sempre a mesma variável
+resposta (percentagem de alojamentos vagos em bom estado de
+conservação), procedendo a ligeiras variações nas variáveis
+explicativas. Para obter resultados significativos foi importante
+assegurar:
+
+1.  Representatividade das diferentes dimensões que concorrem para a
+    explicação da variabilidade da resposta. Assim, incluímos fatores:
+    económicos (valor de venda e zonas com pressão urbanística);
+    territoriais (demografia, delimitações territoriais); habitacionais
+    (dimensão do parque habitacional habitado e devoluto, bem como o
+    estado de conservação) e temporais (dados relativos ao parque
+    edificado e à população em 2011);
+2.  Transformações dos dados. Atendendo ao comportamento não
+    necessariamente linear de alguns descritores, principalmente os
+    habitacionais e demográficas, algumas destas variáveis contínuas
+    foram categorizadas. Em alguns casos, a variável relativa ao valor
+    de venda sofreu uma transformação de escala, tendo-se usado o
+    logaritmo de base 2 para evitar quebras e valores extremos;
+3.  Interações. Ao longo do estudo, verificou-se que a introdução de
+    interações entre variáveis contribuia para que: alguns dos
+    descritores ganhassem expressividade; os coeficientes ilustrassem o
+    impacto diferenciado em função dos diferentes níveis das categorias;
+    o ajustamento global do modelo melhorasse sem criar problemas de
+    confiança na significância estatística ou nos coeficientes.
+
+```{r include=FALSE}
+## Modelos de regressão linear
+
+datase$vagos_2021_cat<-as.factor(ifelse(datase$vagos_2021_per<10,"0",ifelse(
+  datase$vagos_2021_per<16,"1","2"
+)))
+
+datase$vagos_2011_cat<-as.factor(ifelse(datase$vagos_2011_per<10,"0",ifelse(
+  datase$vagos_2011_per<16,"1","2"
+)))
+
+datase$vagosbom_totalvagos_cat<-ifelse(datase$vagosbom_totalvagos<56.8,"0",ifelse(
+  datase$vagosbom_totalvagos<65.73,"1","2"
+))
+
+
+# criar modelos
+
+MOD1<-lm(vagosbom_totalalojamentos~vagos_2021_per+tipo_territorio+pressao_urbanistica+
+           valor_venda+variacao_populacional+vagos_2011_per+variaçao_vagos,data=datase);summary(MOD1) 
+
+MOD2<-update(MOD1,.~.-vagos_2021_per-vagos_2011_per-valor_venda-variaçao_vagos+
+               vagos_2021_cat*variaçao_vagos+vagos_2011_cat+log2(valor_venda));summary(MOD2)
+
+MOD3<-update(MOD2,.~.-log2(valor_venda)-vagos_2021_cat*variaçao_vagos+
+               vagos_2021_cat+vagosbom_totalvagos_cat*log2(valor_venda));summary(MOD3)
+
+MOD4<-update(MOD2,.~.-variacao_populacional-vagos_2011_cat+
+               vagos_2011_cat*variacao_populacional+vagosbom_totalvagos);summary(MOD4)
+
+MOD5<-update(MOD4,.~.-tipo_territorio-log2(valor_venda)+
+               tipo_territorio*valor_venda);summary(MOD5)
+
+MOD6<-update(MOD5,.~.-tipo_territorio*valor_venda-vagos_2021_cat*variaçao_vagos+
+               valor_venda+variaçao_vagos+vagos_2021_cat+tipo_territorio);summary(MOD6)
+
+
+```
+
+```{r echo=FALSE, fig.align='center', results='asis'}
+
+modelos <- list(MOD1, MOD2, MOD3, MOD4, MOD5, MOD6)
+
+R2_Ajustado <- numeric(length(modelos))
+BIC_Valores <- numeric(length(modelos))
+AIC_Valores <- numeric(length(modelos))
+Nomes_Modelos <- character(length(modelos))  
+
+for (i in seq_along(modelos)) {
+  modelo <- modelos[[i]]
+  
+  R2_Ajustado[i] <- summary(modelo)$adj.r.squared
+  BIC_Valores[i] <- BIC(modelo)
+  AIC_Valores[i] <- AIC(modelo)
+  Nomes_Modelos[i] <- paste("Modelo", i)
+}
+
+resultados_df <- data.frame(
+  Modelo = Nomes_Modelos,
+  R2_Ajustado = R2_Ajustado,
+  BIC = BIC_Valores,
+  AIC = AIC_Valores
+)
+
+resultados_df %>%
+  kbl(align = "c", format = "latex", booktabs = TRUE) %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = c("hold_position"))
+```
+
+## **Processo de aferição dos resultados**
+
+Os modelos acima listados permitem-nos iniciar a discussão da escolha a
+partir de três tópicos que consideramos particularmente ilustrativos:
+
+1.  [Qualidade da articulação entre as variáveis.]{.underline}
+
+Os três primeiros modelos apresentam diferentes graus de qualidade da
+resposta do ponto de vista do conhecimento do domínio, mas, em todos os
+casos, terão de ser recusados por problemas que serão discutidos mais à
+frente. O **MODELO 1**, que incorpora todas as variáveis de interesse,
+sem recorrer a nenhuma interação, resultando numa explicação precária do
+fenómeno em estudo. O **MODELO 2** mantém todos os preditores,
+transforma duas variáveis contínuas em categóricas e recorre a uma
+interação. Apesar do seu aparente pior ajustamento, fornece explicações
+interessantes. O **MODELO 3**, retira uma variável (variação de vagos) e
+muda a interação, conduzindo a um bom ajustamento e excelentes
+resultados.
+
+Os três últimos modelos conciliam excelentes respostas do ponto de vista
+do problema em estudo, sem apresentarem problemas do ponto de vista
+estatístico. O **MODELO 4** regressa à base do MODELO 2, introduzindo
+uma nova interação e acrescentando um novo descritor que irá manter-se
+nos restantes: o total de vagos em bom estado sobre o total de vagos. O
+**MODELO 5** retira a escala logarítimica do valor de venda e promove
+uma terceira interação. O **MODELO 6** retira duas das três interações,
+resultando no modelo definitivo pela sua robustez estatística,
+capacidade explicativa e facilidade de interpretação.
+
+2.  [Qualidade de ajustamento e significância das
+    variáveis.]{.underline}
+
+Para o ajustamento foram utilizados os parâmetros apresentados na
+tabela. No caso dos três últimos modelos, recorreu-se ao ANOVA para
+confirmar, também desse ponto de vista, a seleção do modelo 3 (apesar de
+uma redução de 10.142 no Sum of Squares, apresenta um p-value de
+0.0129). Já em relação à significância das variáveis, procedeu-se a um
+equilíbrio entre, por um lado, a expressividade dos coeficientes e os
+p-values das variáveis e, por outro, o conhecimento das variáveis que
+estruturam o problema do ponto de vista da política de habitação e de
+ordenamento do território. Para efeitos ilustrativos, apresentam-se os
+sumários do primeiro e do último modelo.
+
+```{r echo=FALSE, fig.align='center', fig.width=8, fig.height=4}
+
+coef_data <- data.frame(
+  Term = c("(Intercept)", "vagos_2021_per", "tipo_territorioBAIXA DENSIDADE", 
+           "tipo_territorioRAA", "tipo_territorioRAM", "pressao_urbanisticaSIM",
+           "valor_venda", "variacao_populacional", "vagos_2011_per", "variaçao_vagos"),
+  Estimate = c(-1.049, -29.21, 0.3640, 1.301, -0.3657, 0.2276, 
+               0.001384, -0.03642, 29.77, 29.86),
+  StdError = c(0.4275, 274.8, 0.2452, 0.3832, 0.4459, 0.3968,
+               0.0001899, 0.02097, 274.8, 274.8),
+  tvalue = c(-2.454, -0.106, 1.485, 3.395, -0.820, 0.574,
+             7.285, -1.737, 0.108, 0.109),
+  pvalue = c(0.014725, 0.915428, 0.138756, 0.000781, 0.412851, 
+             0.566590, 3.02e-12, 0.083529, 0.913822, 0.913570)
+)
+
+model_stats <- data.frame(
+  Statistic = c("RSE", "R-squared", "Adj R-squared", "F-statistic", "p-value"),
+  Value = c("1.373 (df=291)", "0.7358", "0.7276", "90.06 (df=9,291)", "< 2.2e-16")
+)
+
+
+kable(coef_data, format = "latex", booktabs = TRUE, digits = 4, align = "c", 
+      caption = "\\textbf{Modelo 1}") %>%
+  kable_styling(full_width = FALSE, position = "center", 
+                latex_options = c("HOLD_position")) %>%
+  column_spec(1, bold = TRUE)
+
+kable(model_stats, format = "latex", booktabs = TRUE, align = "c", caption = NULL) %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = c("HOLD_position")) %>%
+  column_spec(1, bold = TRUE)
+
+coef_data <- data.frame(
+  Term = c("(Intercept)", "pressao_urbanisticaSIM", "vagos_2011_cat1", "vagos_2011_cat2",
+           "variacao_populacional", "vagosbom_totalvagos", "valor_venda", "variaçao_vagos",
+           "vagos_2021_cat1", "vagos_2021_cat2", "tipo_territorioBAIXA DENSIDADE",
+           "tipo_territorioRAA", "tipo_territorioRAM",
+           "vagos_2011_cat1:variacao_populacional",
+           "vagos_2011_cat2:variacao_populacional"),
+  Estimate = c(-3.6484, 0.6981, 1.4823, 3.1814, 0.0362, 0.1389, -0.0003, 0.2883,
+               1.7354, 3.2515, 0.2217, -0.1784, 0.5662, -0.0402, -0.0972),
+  StdError = c(0.3395, 0.2474, 0.1603, 0.2789, 0.0187, 0.0055, 0.0001, 0.0279,
+               0.1642, 0.2569, 0.1521, 0.2466, 0.2790, 0.0194, 0.0283),
+  tvalue = c(-10.746, 2.822, 9.245, 11.405, 1.938, 25.268, -2.029, 10.317,
+             10.569, 12.658, 1.458, -0.724, 2.029, -2.078, -3.439),
+  pvalue = c(2e-16, 0.00510, 2e-16, 2e-16, 0.05362, 2e-16, 0.04336, 2e-16,
+             2e-16, 2e-16, 0.14604, 0.46988, 0.04334, 0.03860, 0.00067)
+)
+
+model_stats <- data.frame(
+  Statistic = c("RSE", "R-squared", "Adj R-squared", "F-statistic", "p-value"),
+  Value = c("0.8428 (df=286)", "0.9022", "0.8974", "188.4 (df=14,286)", "< 2.2e-16")
+)
+
+kable(coef_data, format = "latex", booktabs = TRUE, digits = 4, align = "c", 
+      caption = "\\textbf{Modelo 6}") %>%
+  kable_styling(full_width = FALSE, position = "center", 
+                latex_options = c("HOLD_position")) %>%
+  column_spec(1, bold = TRUE)
+
+kable(model_stats, format = "latex", booktabs = TRUE, align = "c", caption = NULL) %>%
+  kable_styling(full_width = FALSE, position = "center", latex_options = c("HOLD_position")) %>%
+  column_spec(1, bold = TRUE)
+
+
+```
+
+3.  [Problemas de multicolinearidade e autocorrelação]{.underline}
+
+Como foi referido, os três primeiros modelos, dois dos quais tinham
+potencial explicativo, tiveram que ser descartados. A
+multicolineariedade foi detetada a partir do VIF e está presente nos
+modelos 1 (devido à convivência pura entre as séries temporais de 2021 e
+2011) e 3 (devido a uma correlação forte entre valor de venda e estado
+de conservação do parque de habitação vago). A autocorrelação foi
+verificada nos modelos 1 e 2 a partir da plotagem de resíduos e da
+confirmação com o Durbin-Watson teste. Apresentamos os resíduos para os
+modelos 1 (problemático) e 6 (não problemático).
+
+```{r echo=FALSE, fig.width=8, fig.height=4}
+par(mfrow=c(2,2))
+  # Gráfico de resíduos2
+  plot(MOD1$residuals,MOD2$fitted.values, main = "Modelo 2: Resíduos vs. Valores Ajustados", xlab="Valores ajustados", ylab="Resíduos")
+  
+  # Gráfico de resíduos2 
+  plot(MOD1$residuals, main= "Modelo 1: Distribuição sequencial do modelo", xlab= "Observações", ylab="Resíduos")
+  
+  # Gráfico de resíduos2
+  plot(MOD6$residuals,MOD2$fitted.values, main = "Modelo 2: Resíduos vs. Valores Ajustados", xlab="Valores ajustados", ylab="Resíduos")
+  
+  # Gráfico de resíduos2 
+  plot(MOD6$residuals, main= "Modelo 1: Distribuição sequencial do modelo", xlab= "Observações", ylab="Resíduos")
+  
+  
+```
+
+## **Análise de duas variáveis**
+
+Apresenta-se em seguida a resposta ao problema colocado na última parte
+do enunciado. Num primeiro momento, as respostas serão feitas sobre um
+modelo de regressão linear. Num segundo momento, sobre um modelo de
+regressão logística. Em ambos os casos, o modelo utilizado será o
+[**MODELO 6**]{.underline}.
+
+Para uma variável contínua X1 e uma variável categórica x2 com mais de
+duas categorias:
+
+### Interpretação dos efeitos brutos e ajustados
+
+1.  **X1**: variação populacional (contínua)
+
+2.  [**EFEITO BRUTO**]{.underline}: quando todas as variáveis são zero,
+    cada aumento na unidade da variável explicativa corresponde a um
+    decréscimo de -0.13980 nas unidades da variável resposta, com um
+    p-value de 3.3e-09.
+
+3.  [**EFEITO AJUSTADO**]{.underline}: mantendo todas as outras
+    variáveis fixas, o impacto na variável resposta é 0.0362195, e o
+    p-value 0.05362.
+
+4.  **X2:** vagos em bom estado em 2011 (categórica)
+
+5.  [**EFEITO BRUTO**:]{.underline} quando todas as variáveis são zero:
+    para a categoria de referência a variação na resposta é 6.2387 nas
+    suas unidades, com um p-value \< 2e-16. Para a primeira categoria, a
+    variação na resposta sofre um aumento de 2.1772 unidades em relação
+    à categoria de referência, com um p-value de 7.23e-13. Para a
+    segunda categoria, a variação na resposta sofre um aumento de 4.9030
+    unidades em relação à categoria de referência, com um p-value de
+    2e-16.
+
+[**EFEITO AJUSTADO**:]{.underline} Analisa-se o impacto quando todas as
+variáveis são 0, e as variáveis categóricas estão na categoria de
+referência. Para a categoria de referência a variação na resposta é
+-3.6483670, e o p-value \< 2e-16. Para primeira categoria, a variação na
+resposta é 1.4823079 unidades mais do que na categoria de referência, e
+o p-value 7.23e-13. Para a segunda categoria, a variação na resposta é
+3.1813719 mais do que na categoria de referência, com um p-value de
+7.23e-13.
+
+### Passagem da segunda para a terceira categoria e construção de dois intervalos de confiança
+
+A transição da segunda para a terceira categoria de $X_2$ está associada
+a uma redução na variável resposta. O efeito estimado médio é de
+aproximadamente **-1.7 unidades**.
+
+-   **Intervalos de Confiança (IC):**
+    -   **95% IC:** (-2.097, -1.301)
+    -   **90% IC:** (-2.033, -1.365)
+
+Ambos os intervalos indicam que o efeito é estatisticamente
+significativo, uma vez que nenhum deles inclui o valor zero. Isso sugere
+evidências consistentes de que indivíduos na segunda categoria de $X_2$
+apresentam, em média, valores de resposta mais baixos do que aqueles na
+terceira categoria.
+
+### Existência de uma interação significativa entre X1 e X2
+
+A variável contínua, para a categoria de referência, tem um efeito de
+0.0362195 quase significativo (p-value 0.05362) na variável resposta.
+Contudo, este impacto é diferente em função da categoria. Na categoria
+1, o impacto é de 0.0362195 - 0.0402316 nas unidades da variável
+resposta, mantendo todas as outras variáveis fixas. Na categoria 2,
+temos um impacto de 0.0362195 - 0.0971813 na variável resposta, mantendo
+todas as outras variáveis fixas. Por outras palavras, nestas duas
+categorias, o impacto na variável resposta passa de ser positivo, como
+acontecia na categoria de referência, a ser negativo, com um impacto
+cada vez maior.
+
+# [Modelo de regressão logística]{.underline}
+
+Neste caso, o modelo utilizado foi o seguinte:
+X2l\<-glm(variavel_logistica\~vagos_2011_cat, family="binomial",
+data=datase)
+
+Para uma variável contínua X1 e uma variável categórica com mais de duas
+categorias:
+
+## **Interpretação dos efeitos brutos e ajustados**
+
+-   **X1:** variação populacional (contínua)
+
+    [**EFEITO BRUTO**:]{.underline} quando todas as variáveis preditoras
+    são 0, cada aumento de 1 unidade na variável explicativa está
+    associado a uma diminuição nos odds do evento de exp(-0.022930),com
+    p-value = 4.23e-07.
+
+    [**EFEITO AJUSTADO**:]{.underline} Com o efeito ajustado, cada
+    aumento de 1 unidade na variável explicativa está associado a uma
+    diminuição nos odds do evento de exp(1.19541), mantendo todas as
+    outras variáveis constantes.
+
+-   **X2:** vagos em bom estado em 2011 (categórica)
+
+[**EFEITO BRUTO**:]{.underline} para a categoria de referência, os odds
+do evento ocorrer são exp(-1.7610), com significância estatística
+(p-value = 6.84e-08). Para a primeira categoria, os odds do evento são
+exp(1.9498) vezes maiores que na categoria de referência, com p-value =
+6.59e-08.Para a segunda categoria, os odds do evento são exp(3.4139)
+vezes maiores que na categoria de referência, com p-value = 2.86e-12.
+
+[**EFEITO AJUSTADO**:]{.underline} Analisa-se o impacto quando todas as
+variáveis são 0, e as variáveis categóricas estão na categoria de
+referência. Para a categoria de referência, os odds do evento ocorrer
+são exp(-4.063e+01),com p-value = 8.51e-10. Para a primeira categoria,
+os odds do evento são exp(5.893e+00) vezes maiores do que na categoria
+de referência, com p-value = 1.45e-05. Para a segunda categoria, os odds
+do evento são exp(1.053e+01) vezes maiores do que na categoria de
+referência, com p-value = 4.16e-06
+
+## **Passagem da segunda para a terceira categoria e construção de dois intervalos de confiança**
+
+A mudança da segunda para a terceira categoria de $X_2$ está associada a
+uma redução significativa nas chances (odds) da resposta positiva. O
+efeito estimado (em log-odds) é negativo, indicando uma diminuição nas
+odds.
+
+-   **Intervalos de Confiança (IC) para Log-Odds:**
+    -   **95% IC:** (-7.164, -2.108)
+    -   **90% IC:** (-6.756, -2.516)
+
+Ambos os intervalos excluem o valor zero, confirmando que o efeito é
+estatisticamente significativo em níveis de confiança de 95% e 90%. A
+redução nas odds pode ser quantificada ao transformar os limites em odds
+ratios, exponenciando os valores (e.g., $e^{-7.164}$ a $e^{-2.108}$ para
+o 95% IC).
+
+Esses resultados sugerem que a segunda categoria de $X_2$ está associada
+a odds substancialmente menores de um resultado positivo em comparação
+com a primeira categoria.
+
+## **Existência de uma interação significativa entre X1 e X2**
+
+A variável contínua, para a categoria de referência, tem um efeito quase
+significativo na variável resposta, com p-value: 0.3173 e um impacto
+exp(-4.063e+01). Mas este impacto é diferente em função da categoria. Na
+categoria 1, temos um impacto de exp(-4.063e+01-1.573e-01) na variável
+resposta, mantendo todas as outras variáveis fixas. Na categoria 2,
+temos um impacto de exp(-4.063e+01-2.503e-01) na variável resposta,
+mantendo todas as outras variáveis fixas
+
+# [**Conclusões**]{.underline}
+
+Este trabalho demonstrou que o fenómeno dos alojamentos vagos é
+heterogêneo e ressalta a necessidade de políticas adaptadas às
+características locais, evitando soluções genéricas que podem não ser
+eficazes em todas as situações. Os resultados dos modelos apontam para
+uma miríade de causas que poderão ser abordadas em sede de política
+pública de habitação e de território. Entre os quais, se destacam:
+
+-    Em áreas densamente povoadas, políticas de incentivo à reabilitação
+    de imóveis tendem a ser mais eficazes, enquanto que em regiões com
+    crescimento populacional tende a haver uma reocupação de imóveis em
+    bom estado. Já os territórios em declínio demográfico enfrentam
+    dificuldades para aproveitar o estoque de imóveis vagos disponíveis.
+
+-   A atração de investimentos é mais eficaz em locais com baixa
+    proporção de imóveis vagos em bom estado, enquanto, em áreas com
+    maior peso desses imóveis, são necessárias estratégias
+    complementares, como qualificação territorial e promoção de usos
+    alternativos. Além disso, é crucial regular o uso de imóveis vagos
+    em áreas com forte especulação para evitar sua retenção no mercado.
