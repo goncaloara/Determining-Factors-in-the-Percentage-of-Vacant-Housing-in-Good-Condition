@@ -1,7 +1,7 @@
 ---
 title: "Fatores determinantes na percentagem de alojamentos vagos em boas condições habitacionais"
 subtitle: "Análise de Modelos de Regressão Linear e Logística"
-author: "Gonçalo Araújo"
+author: "Aitor Varea e Gonçalo Araújo"
 date: "`r Sys.Date()`"
 output:
   pdf_document:
